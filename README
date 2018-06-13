@@ -1,0 +1,50 @@
+Spiridon Robert
+
+Sistem monetar de tip bancomat.
+
+In realizarea clientului am creat cate un socket pentru conexiunea de TCP si UDP si conectat folosind functia conect la server. Am deschis fisierul pentru scris cu numele corespunzator( client-<id_proces>). In while'ul infinit (pana la apelarea comenzii quit sau primirea stringului quit de la server) am folosit select pentru multiplexarea conexiunii. Aceasta bucla contine in principiu trei "zone" , una in care scriu de la tastatura,alta care primesc mesaje de la server prin TCP si cea dea treia pe care primesc mesaje de la server prin UDP.La citirea din stdin , in cazul citirii "unlock" concatenez unlock cu numarul cardului ultimului apel login si trimit prin UDP spre server.  (*)Daca stringul salvat in recv_sv este "Trimite parola secreta" atunci voi trimite tot prin UDP o parola citata de la tastatura.Daca citesc quit inchid fisierul in care scriam si trimit "quit" catre server.La comanda login daca sunt deja conectat( daca logged == 1) atunci afisez "Sesiune deja existenta".La logout daca logged == 0 atunci va da mesajul de eroare "Clientul nu este autentificat".La orice apelare corecta de login salvez numarul cardului in numar_card.
+
+In zona 2 de primire mesaje prin TCP tot ce primesc de la server scriu in fisier si la stdout cu prefixarea ATM> .In caz de primesc "quit" de la server se comporta ca la quit'ul de mai sus.
+
+In zona 3 de primire mesaje de la UDP scriu exact cum am explicat mai sus dar cu prefixarea UNLOCK> .
+In caz de primesc "Trimite parola secreta" salvez stringul in recv_sv si folosesc cum am explicat mai sus in zona 1  (*).
+
+In realizarea serverului am construit structul user care contine toate informatiile specificate in enunt plus logged(care e 1 cand e logat si 0 contrar) si block (>= 3 blocat).
+Functii folosite:
+	logout: -daca sirul primit nu este de marimea care trebuie atunci returnez codul -11(credentiale gresite) 
+		-altfel pentru userul curent initializez logged ca 0 (deconectat)
+		-si returnez -12 ("Deconectat de la bancomat")
+
+**mesajele sunt date in functie de codul returnat si se gasesc in functia respons_message_handle
+
+	listsold: - acceasi eroare de marime
+		  - daca nu este logat returneaza -1("Clientul nu este logat")
+		  - in final returneaza -13 ( care va fi preluat in respons_message_handle
+			pentru afisarea soldului)
+
+	getmoney: - verific daca e logat
+		  - verific daca suma ceruta este mai mare decat cea din cont(users[].sold)
+		  - daca am trecut de verificari extrag suma si cu return -14("Suma <suma> retrasa cu 				succes)
+
+	putmoney: -verific daca este logat
+		  -adun suma in cont
+
+	
+	unlock:   -daca este blocat returnez -16(respons_message_handle v-a debloca userul)
+		  -daca nu este blocat returnez -6("Operatie esuata")
+
+	login:	  -verificare de marime (strlen)
+	 	  -pentru fiecare client verific daca numarul cardului primit corespunde cu cardul 
+			clientului si la fel si pentru pin
+		  -daca da mai verific daca este blocat sau logat
+
+		  -daca doar pinul nu este corect cresc valoarea lui bloc(>= 3 inseamna ca este 			blocat)
+
+	respons_message_handle: -codul cam vorbeste de la sine(adica contine stringurile care le 			trimit)
+				-in cazul -17 deblocheaza clientul
+In main'ul serverului citesc din fisierul de useri informatiile acestora si le adaug in vectorul de structuri.Creez socket de TCP si UDP, dau bind pentru acestea si listen pentru TCP.
+La fel ca in client am trei zone de citire din stdin, primire mesaje de la client prin UDP si TCP.
+La UDP daca primesc unlock, tratez cu functia unlock specificata mai sus si trimit raspunsul iar daca nu primesc unlock ci parola secreta atunci verific daca este corecta si trimit mesajul corespunzator.La TCP primesc comenzile si le tratez la fel cu functiile de mai sus dupa care respons_message_handle creeaza mesajul care este trimis cu send.
+Vectorul socket_client_id l-am folosit pentru a tine evidenta ce client s-a logat pe ce socket(daca clientul 3 s-a logat pe socketul 5 atunci socket_client_id[5] = 3).
+Am implementat block'ul ca atunci cand se aplica 3 login'uri pe acelasi numar de card indiferent daca consecutiv sau nu atunci sa se blocheze.
+
